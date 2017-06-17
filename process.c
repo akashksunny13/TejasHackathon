@@ -8,15 +8,21 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#define NETWORK_SIZE 100
+#define NETWORK_SIZE 20
+#define INFINITY -1
 int AJ[NETWORK_SIZE][NETWORK_SIZE];
 int ports[NETWORK_SIZE],portnum=0;
 int neighbour[NETWORK_SIZE];
 int myNo;
-// A normal C function that is executed as a thread when its name
-// is specified in pthread_create()
+int myPort;
+void printAJ();
+void updateAJ(int **mat);
+void loaddata();
+void sendData();
+void listenAndPrint();
 void *Listener(void *vargp)
 {
+	memset(AJ, 0, sizeof(AJ[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
     sleep(1);
     printf("Listening and printing\n");
     listenAndPrint();
@@ -31,13 +37,18 @@ void *Sender(void *vargp)
     return NULL;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
     pthread_t sid, lid;
+    myPort = atoi(argv[1]);
     printf("Before Thread\n");
     loaddata();
     pthread_create(&sid, NULL, Sender, NULL);
 	pthread_create(&lid, NULL, Listener, NULL);
+	while(1)
+{		printAJ();
+		sleep(3);
+	}	
     pthread_join(sid, NULL);
 	pthread_join(lid, NULL);
     printf("After Thread\n");
@@ -48,18 +59,17 @@ int main()
 void listenAndPrint()
 {
     int listenfd = 0, connfd = 0;
-    int length;
+    int nodenum;
     struct sockaddr_in serv_addr; 
 	
     char received[1025];
+	int AJTemp[NETWORK_SIZE][NETWORK_SIZE];
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
     memset(&serv_addr, '0', sizeof(serv_addr));
-    memset(received, '0', sizeof(received)); 
-
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(5001); 
+    serv_addr.sin_port = htons(myPort); 
 
     bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)); 
 
@@ -68,12 +78,15 @@ void listenAndPrint()
     while(1)
     {
 		bzero(received, 1025);
+		memset(AJTemp, INFINITY, sizeof(AJTemp[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
 		printf("Receiver waiting\n");
         connfd = accept(listenfd, (struct sockaddr*)NULL, NULL);
         printf("Receiver connected\n");
-        read(connfd, (char*)&length, sizeof(length));
-        printf("%ld\n",length);
-        read(connfd,received,length);
+        read(connfd, (char*)&nodenum, sizeof(nodenum));
+        printf("%d\n",nodenum);
+        AJ[nodenum][myNo] = AJ[myNo][nodenum] = neighbour[nodenum];
+        read(connfd,(char*)AJTemp,sizeof(AJTemp[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
+        updateAJ(AJTemp);
         printf("%s\n", received);
         close(connfd);
      }
@@ -93,7 +106,7 @@ void sendData()
     char sendBuff[1025] = "12345";
 
     sendfd = socket(AF_INET, SOCK_STREAM, 0);
-    memset(&serv_addr, '0', sizeof(serv_addr));
+    memset(&serv_addr, INFINITY, sizeof(serv_addr));
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -128,3 +141,31 @@ void loaddata()
     }
 	fclose(file);
 	}
+void updateAJ(int **mat)
+{
+	int i,j;
+	for(i=0;i<NETWORK_SIZE;++i)
+	{
+		if(i==myNo)
+		continue;
+	for(j=0;j<NETWORK_SIZE;++j)
+	{
+		if(j==myNo)
+			continue;
+			if(AJ[i][j]== -1)
+			AJ[i][j] = mat[i][j];
+	}
+	}
+}
+void printAJ()
+{
+	int i,j;
+	for(i=0;i<NETWORK_SIZE;++i)
+	{
+	for(j=0;j<NETWORK_SIZE;++j)
+	{
+		printf("%d\t",AJ[i][j]);
+	}
+	printf("\n");
+	}
+}
