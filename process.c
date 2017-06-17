@@ -12,6 +12,7 @@
 #define INFINITY -1
 #define DATA_RELOAD_TIME 5
 int AJ[NETWORK_SIZE][NETWORK_SIZE];
+int Temp[NETWORK_SIZE][NETWORK_SIZE];
 int ports[NETWORK_SIZE],portnum=0;
 int neighbour[NETWORK_SIZE];
 int myNo;
@@ -46,8 +47,10 @@ while(1)
 	{
 		if(dataReady)
 		{
-			printAJ();
+			//printAJ();
+			memcpy(Temp, AJ, sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
 			dataReady = 0;
+			calculateAndPrintSDM(Temp);
 		}	
 	}	}
 	
@@ -85,18 +88,17 @@ void listenAndPrint()
 	if(dataReady)
 		return;
 	//printf("listenAndPrint%d\n", dataReady);
-	memset(AJ, INFINITY, sizeof(AJ[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
+	memset(AJ, INFINITY, sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
     int connfd = 0;
     int nodenum;
 	
 	int AJTemp[NETWORK_SIZE][NETWORK_SIZE];
 
 
-
 	time_t endTime = time(NULL) + DATA_RELOAD_TIME;
     while(time(NULL) < endTime)
     {
-		memset(AJTemp, INFINITY, sizeof(AJTemp[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
+		memset(AJTemp, INFINITY, sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
 		//printf("Receiver waiting\n");
         connfd = accept(listenfd, (struct sockaddr*)NULL, NULL);
         //if(connfd ==0)
@@ -127,7 +129,6 @@ void sendData()
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serv_addr.sin_port = htons(ports[i]); 
-	sleep(2);
 	//printf("sender trying to send to:%d\n", ports[i]);
     if(connect(sendfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == 0)
     {
@@ -193,6 +194,44 @@ void printAJ()
 	for(j=0;j<NETWORK_SIZE;++j)
 	{
 		printf("%d\t",AJ[i][j]);
+	}
+	printf("\n");
+	}
+}
+
+void calculateAndPrintSDM(int mat[NETWORK_SIZE][NETWORK_SIZE])
+{
+    int dist[NETWORK_SIZE][NETWORK_SIZE], i, j, k;
+    for (i = 0; i < NETWORK_SIZE; i++)
+		mat[i][i]=0;
+    for (i = 0; i < NETWORK_SIZE; i++)
+        for (j = 0; j < NETWORK_SIZE; j++)
+        {
+            dist[i][j] = mat[i][j];
+            if(dist[i][j] == -1)
+				dist[i][j] =INT_MAX;
+		}
+    for (k = 0; k < NETWORK_SIZE; k++)
+    {
+        for (i = 0; i < NETWORK_SIZE; i++)
+        {
+            for (j = 0; j < NETWORK_SIZE; j++)
+            {
+                if ((dist[i][k] + dist[k][j] < dist[i][j] )&& (dist[i][k]!=-1) && (dist[k][j]!=-1))
+                    dist[i][j] = dist[i][k] + dist[k][j];
+            }
+        }
+        }
+        printMat(dist);
+        }
+void printMat(int graph[NETWORK_SIZE][NETWORK_SIZE])
+{
+	int i,j;
+	for(i=0;i<NETWORK_SIZE;++i)
+	{
+	for(j=0;j<NETWORK_SIZE;++j)
+	{
+		printf("%d\t",graph[i][j]);
 	}
 	printf("\n");
 	}
