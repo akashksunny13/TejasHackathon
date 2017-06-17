@@ -8,124 +8,146 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#define NETWORK_SIZE 20
+#define NETWORK_SIZE 6
 #define INFINITY -1
+#define DATA_RELOAD_TIME 5
 int AJ[NETWORK_SIZE][NETWORK_SIZE];
 int ports[NETWORK_SIZE],portnum=0;
 int neighbour[NETWORK_SIZE];
 int myNo;
+int dataReady = 0;
+int listenfd;
 int myPort;
 void printAJ();
-void updateAJ(int **mat);
+void updateAJ(int [NETWORK_SIZE][NETWORK_SIZE]);
 void loaddata();
 void sendData();
 void listenAndPrint();
 void *Listener(void *vargp)
 {
-	memset(AJ, 0, sizeof(AJ[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
-    sleep(1);
-    printf("Listening and printing\n");
-    listenAndPrint();
+	listenfd = socket(AF_INET, SOCK_STREAM, 0);
+			struct sockaddr_in serv_addr; 
+			memset(&serv_addr, '0', sizeof(serv_addr));
+			serv_addr.sin_family = AF_INET;
+			serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+			serv_addr.sin_port = htons(myPort);
+			bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));  
+			listen(listenfd, 1000); 
+	while(1)
+	{
+		    
+			listenAndPrint();
+	}
     return NULL;
 }
-
+void *Intellect(void *vargp)
+{
+while(1)
+	{
+		if(dataReady)
+		{
+			printAJ();
+			dataReady = 0;
+		}	
+	}	}
+	
 void *Sender(void *vargp)
 {
-    sleep(1);
-    sendData();
-    printf("In sender\n");
+    while(1)
+    {
+		sleep(2);
+		sendData();
+	}
+    //printf("In sender\n");
     return NULL;
 }
 
 int main(int argc, char *argv[])
 {
-    pthread_t sid, lid;
+    pthread_t sid, lid, aid;
     myPort = atoi(argv[1]);
-    printf("Before Thread\n");
-    loaddata();
+    myNo = atoi(argv[2]);
+    //printf("Before Thread\n");
+    loaddata(argv[1]);
     pthread_create(&sid, NULL, Sender, NULL);
 	pthread_create(&lid, NULL, Listener, NULL);
-	while(1)
-{		printAJ();
-		sleep(3);
-	}	
+	pthread_create(&aid, NULL, Intellect, NULL);
     pthread_join(sid, NULL);
 	pthread_join(lid, NULL);
-    printf("After Thread\n");
+	pthread_join(aid, NULL);
+    //printf("After Thread\n");
     exit(0);
 }
 
 
 void listenAndPrint()
 {
-    int listenfd = 0, connfd = 0;
+	if(dataReady)
+		return;
+	//printf("listenAndPrint%d\n", dataReady);
+	memset(AJ, INFINITY, sizeof(AJ[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
+    int connfd = 0;
     int nodenum;
-    struct sockaddr_in serv_addr; 
 	
-    char received[1025];
 	int AJTemp[NETWORK_SIZE][NETWORK_SIZE];
 
-    listenfd = socket(AF_INET, SOCK_STREAM, 0);
-    memset(&serv_addr, '0', sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(myPort); 
 
-    bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)); 
 
-    listen(listenfd, 10); 
-
-    while(1)
+	time_t endTime = time(NULL) + DATA_RELOAD_TIME;
+    while(time(NULL) < endTime)
     {
-		bzero(received, 1025);
 		memset(AJTemp, INFINITY, sizeof(AJTemp[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
-		printf("Receiver waiting\n");
+		//printf("Receiver waiting\n");
         connfd = accept(listenfd, (struct sockaddr*)NULL, NULL);
-        printf("Receiver connected\n");
+        //if(connfd ==0)
+			//printf("Oh, something went wrong with connect()! %s\n", strerror(errno));
+        //printf("Receiver connected\n");
         read(connfd, (char*)&nodenum, sizeof(nodenum));
         printf("%d\n",nodenum);
         AJ[nodenum][myNo] = AJ[myNo][nodenum] = neighbour[nodenum];
-        read(connfd,(char*)AJTemp,sizeof(AJTemp[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
-        updateAJ(AJTemp);
-        printf("%s\n", received);
+        read(connfd,(char*)AJTemp,sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
         close(connfd);
+        //printf("BEfore updating\n");
+        updateAJ(AJTemp);
      }
+     dataReady = 1;
 }
 void sendData()
 {
 	int i=0;
 	
-	for(;1;++i)
+	for(;i<portnum;++i)
 	{
-	if(i==portnum)
-		i=0;
 	int sendfd = 0, connfd = 0;
     int length = 5;
     struct sockaddr_in serv_addr; 
-	
-    char sendBuff[1025] = "12345";
-
     sendfd = socket(AF_INET, SOCK_STREAM, 0);
-    memset(&serv_addr, INFINITY, sizeof(serv_addr));
+    memset(&serv_addr, '0', sizeof(serv_addr));
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serv_addr.sin_port = htons(ports[i]); 
 	sleep(2);
-	printf("sender trying\n");
+	//printf("sender trying to send to:%d\n", ports[i]);
     if(connect(sendfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == 0)
     {
-	printf("sender connected\n");
-    write(sendfd, (char*)&length, sizeof(length));
-    write(sendfd, sendBuff,length);
-    close(sendfd);
+	//printf("sender connected\n");
+    write(sendfd, (char*)&myNo, sizeof(myNo));
+    write(sendfd, (char*)AJ,sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
+    //printf("sender wrote\n");
 	}
+	else
+	{
+		  //printf("Oh, something went wrong with connect()! %s\n", strerror(errno));
+	}
+	
+    close(sendfd);
     }
 }
 
-void loaddata()
+void loaddata(char **fileName)
 {
-	FILE *file = fopen("nodes", "rb");
+	FILE *file = fopen(fileName, "rb");
 	int node,port,distance;
     if (file != NULL)
     {
@@ -136,24 +158,30 @@ void loaddata()
 			neighbour[node] = distance;
 			ports[i++]= port;
 			portnum = i;
-			}
-				
+		}
     }
 	fclose(file);
 	}
-void updateAJ(int **mat)
+void updateAJ(int mat[NETWORK_SIZE][NETWORK_SIZE])
 {
+	//printf("In update aj\n");
 	int i,j;
 	for(i=0;i<NETWORK_SIZE;++i)
 	{
+		//printf("In i loop%d\n",i);
 		if(i==myNo)
 		continue;
 	for(j=0;j<NETWORK_SIZE;++j)
 	{
+		//printf("In j loop%d\n",j);
 		if(j==myNo)
 			continue;
 			if(AJ[i][j]== -1)
+			{
+				//printf("Trying to assign from mat");
 			AJ[i][j] = mat[i][j];
+			//printf("Assigned from mat");
+		}
 	}
 	}
 }
