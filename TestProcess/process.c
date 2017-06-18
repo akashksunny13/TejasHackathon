@@ -8,12 +8,10 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#include <limits.h>
-#define NETWORK_SIZE 6
+#define NETWORK_SIZE 3
 #define INFINITY -1
 #define DATA_RELOAD_TIME 5
 int AJ[NETWORK_SIZE][NETWORK_SIZE];
-int Temp[NETWORK_SIZE][NETWORK_SIZE];
 int ports[NETWORK_SIZE],portnum=0;
 int neighbour[NETWORK_SIZE];
 int myNo;
@@ -44,21 +42,12 @@ void *Listener(void *vargp)
 }
 void *Intellect(void *vargp)
 {
-	int i;
 while(1)
 	{
 		if(dataReady)
 		{
-			printf("\n\n");
-			//printAJ();
-			printf("\n\n");
-			memcpy(Temp, AJ, sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
+			printAJ();
 			dataReady = 0;
-			
-			for (i = 0; i < NETWORK_SIZE; i++)
-				Temp[i][i]=0;
-			calculateAndPrintSDM(Temp);
-			calculateAndPrintMST(Temp);
 		}	
 	}	}
 	
@@ -66,7 +55,7 @@ void *Sender(void *vargp)
 {
     while(1)
     {
-		sleep(1);
+		sleep(2);
 		sendData();
 	}
     //printf("In sender\n");
@@ -95,24 +84,26 @@ void listenAndPrint()
 {
 	if(dataReady)
 		return;
-	memset(AJ, INFINITY, sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
+	//printf("listenAndPrint%d\n", dataReady);
+	memset(AJ, INFINITY, sizeof(AJ[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
     int connfd = 0;
     int nodenum;
 	
 	int AJTemp[NETWORK_SIZE][NETWORK_SIZE];
 
 
+
 	time_t endTime = time(NULL) + DATA_RELOAD_TIME;
     while(time(NULL) < endTime)
     {
-		memset(AJTemp, INFINITY, sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
+		memset(AJTemp, INFINITY, sizeof(AJTemp[0][0]) * NETWORK_SIZE * NETWORK_SIZE);
 		//printf("Receiver waiting\n");
         connfd = accept(listenfd, (struct sockaddr*)NULL, NULL);
-        //if(connfd ==0)
-			//printf("Oh, something went wrong with connect()! %s\n", strerror(errno));
+        if(connfd ==0)
+			printf("Oh, something went wrong with connect()! %s\n", strerror(errno));
         //printf("Receiver connected\n");
         read(connfd, (char*)&nodenum, sizeof(nodenum));
-        //printf("%d\n",nodenum);
+        printf("%d\n",nodenum);
         AJ[nodenum][myNo] = AJ[myNo][nodenum] = neighbour[nodenum];
         read(connfd,(char*)AJTemp,sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
         close(connfd);
@@ -136,6 +127,7 @@ void sendData()
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serv_addr.sin_port = htons(ports[i]); 
+	sleep(2);
 	//printf("sender trying to send to:%d\n", ports[i]);
     if(connect(sendfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == 0)
     {
@@ -143,6 +135,10 @@ void sendData()
     write(sendfd, (char*)&myNo, sizeof(myNo));
     write(sendfd, (char*)AJ,sizeof(int) * NETWORK_SIZE * NETWORK_SIZE);
     //printf("sender wrote\n");
+	}
+	else
+	{
+		  printf("Oh, something went wrong with connect()! %s\n", strerror(errno));
 	}
 	
     close(sendfd);
@@ -200,96 +196,4 @@ void printAJ()
 	}
 	printf("\n");
 	}
-}
-
-void calculateAndPrintSDM(int mat[NETWORK_SIZE][NETWORK_SIZE])
-{
-    int dist[NETWORK_SIZE][NETWORK_SIZE], i, j, k;
-    for (i = 0; i < NETWORK_SIZE; i++)
-        for (j = 0; j < NETWORK_SIZE; j++)
-        {
-            dist[i][j] = mat[i][j];
-            if(dist[i][j] == -1)
-				dist[i][j] = 9999;
-		}
-    for (k = 0; k < NETWORK_SIZE; k++)
-    {
-        for (i = 0; i < NETWORK_SIZE; i++)
-        {
-            for (j = 0; j < NETWORK_SIZE; j++)
-            {
-                if ((dist[i][k] + dist[k][j] < dist[i][j] )&& (dist[i][k]!=-1) && (dist[k][j]!=-1))
-                    dist[i][j] = dist[i][k] + dist[k][j];
-            }
-        }
-        }
-        printf("The shortest path b/w nodes ia given by\n");
-        printMat(dist);
-        printf("\n\n");
-        }
-void printMat(int graph[NETWORK_SIZE][NETWORK_SIZE])
-{
-	int i,j;
-	for(i=0;i<NETWORK_SIZE;++i)
-	{
-	for(j=0;j<NETWORK_SIZE;++j)
-	{
-		printf("%d\t",graph[i][j]);
-	}
-	printf("\n");
-	}
-}
-
-void calculateAndPrintMST(int mat[NETWORK_SIZE][NETWORK_SIZE])
-{
-	int i,j;
-	int parent[NETWORK_SIZE];
-	memset(parent, INFINITY, sizeof(int) * NETWORK_SIZE );
-     int key[NETWORK_SIZE];
-     int mstSet[NETWORK_SIZE]; 
-     for (i = 0; i < NETWORK_SIZE; i++)
-        for (j = 0; j < NETWORK_SIZE; j++)
-        {
-            if(mat[i][j] == -1)
-				mat[i][j] = 0;
-		}
-     for (i = 0; i < NETWORK_SIZE; i++)
-        key[i] = INT_MAX, mstSet[i] = 0;
-     key[myNo] = 0; 
-     parent[myNo] = -2;
-	//printf("Before count\n");
-     for (int count = 0; count < NETWORK_SIZE-1; count++)
-     {
-        int u = minKey(key, mstSet);
-        mstSet[u] = 1;
-        for (i = 0; i < NETWORK_SIZE; i++)
-          if (mat[u][i] && mstSet[i] == 0 && mat[u][i] <  key[i])
-             parent[i]  = u, key[i] = mat[u][i];
-     }
-     //printf("Print MST\n");
-     printMST(parent, NETWORK_SIZE, mat);
-}
-
-int printMST(int parent[], int n, int graph[NETWORK_SIZE][NETWORK_SIZE])
-{
-   //printf("Edge   Weight\n");
-   for (int i = 0; i < NETWORK_SIZE; i++)
-   {
-	   if(i==myNo)
-		continue;
-	   if(parent[i] == -1)
-		continue;
-      printf("%d - %d    %d \n", parent[i], i, graph[i][parent[i]]);
-  }
-}
-
-int minKey(int key[], int mstSet[])
-{
-   int min = INT_MAX, min_index;
- 
-   for (int v = 0; v < NETWORK_SIZE; v++)
-     if (mstSet[v] == 0 && key[v] < min)
-         min = key[v], min_index = v;
- 
-   return min_index;
 }
